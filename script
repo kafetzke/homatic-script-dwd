@@ -1,0 +1,423 @@
+! ------  DWD Unwetterwarnung 04.10.2018  Vers. 1.13 -----------------------------------------------------------
+! Unwetterwarnungsscript von Grrzzz / klana / kafetzke
+! Version 1.2 vom 28.08.2019
+!
+! https://homematic-forum.de/forum/viewtopic.php?f=31&t=38161
+!------------------------------------------------------------------------------------------------------------
+
+!------------------------------------------------------------------------------------------------------------
+! Konfiguration
+!------------------------------------------------------------------------------------------------------------
+! Anzulegen fuer das Script Wetterwarn_DWD sind die 
+! folgenden Systemvariablen, welche besser über das Einmalsscript angelegt werden.
+! Das Einmalscript unter Script testen eingefügt und einmalig ausführen.
+! --------------------------------------------------------------
+! Wetterwarnung_Aktiv           Boolean
+! Wetterwarnung_Text            Zeichenkette (für Ausgabe)  
+! --------------------------------------------------------------
+! Wetterwarnung_city            Zeichenkette (Nummer zum Suchen)
+! Wetterwarnung_regionName      Zeichenkette
+! Wetterwarnung_start           Zeichenkette
+! Wetterwarnung_end             Zeichenkette
+! Wetterwarnung_startDateTime   Zeichenkette
+! Wetterwarnung_endDateTime     Zeichenkette
+! Wetterwarnung_level           Zahl
+! Wetterwarnung_typ             Werteliste mit: unbekannt;Gewitter;Wind/Sturm/Orkan;Stark- und Dauerregen;Schneefall/Schneeverwehungen;Nebel;Frost;Glaette/Glatteis;Tauwetter;Hitzewarnungen;UV-Warnungen;Kuestenwarnungen;Binnenseewarnungen
+! Wetterwarnung_state           Zeichenkette
+! Wetterwarnung_description     Zeichenkette
+! Wetterwarnung_event           Zeichenkette
+! Wetterwarnung_headline        Zeichenkette
+! Wetterwarnung_instruction     Zeichenkette
+! Wetterwarnung_stateShort      Zeichenkette
+! Wetterwarnung_altitudeStart   Zeichenkette
+! Wetterwarnung_altitudeEnd     Zeichenkette
+!
+!------------------------------------------------------------------------------------------------------------
+
+!------------------------------------------------------------------------------------------------------------
+! Debugging einschalten = true oder aussschalten = false
+! z.B. zum Test unter "Script testen"
+!
+! ShowVorabInfo = false -> es wird keine Vorabwarnung angezeigt, 
+!               = true  -> es wird auch die Vorabwarnung angezeigt
+!  noch nicht aktiv
+!------------------------------------------------------------------------------------------------------------
+boolean debug = false;
+boolean ShowVorabInfo = true;
+
+! --------------------------------------------------------------
+! Virtuelles CUxD-Exec-Device hier angeben
+! --------------------------------------------------------------
+string execdevice = "CUxD.CUX2801001:1";
+
+! --------------------------------------------------------------
+! Die Region-ID aus der JSON Datei raussuchen, dazu diese Adresse
+! im Browser eingeben:
+!  https://www.dwd.de/DWD/warnungen/warnapp/json/warnings.json
+
+! Die Region-ID kann auf Gemeindeebene aus dieser Liste gezogen werden
+! http://www.dwd.de/DE/leistungen/gds/help/warnungen/cap_warncellids_csv.csv?__blob=publicationFile&v=4
+
+! Für Berlin z.B. 111000000
+! --------------------------------------------------------------
+ string city = "103254000";   ! Kreis Hildesheim
+! string city = "803254029";   ! Gemeinde Schellerten
+
+
+! --------------------------------------------------------------
+! Nötige CCU-Systemvariablen zuweisen
+! In der CCU anzulegende Systemvariablen stehen nachfolgend in Anführungszeichen
+! Am Besten mit dem "Einmalscript" automatisch anlegen lassen!
+! _Text und _Aktiv sind Anfangsbuchstabe nach Unterstrich gross und 
+! alle DWD Felder sind Anfangsbuchstabe nach Unterstrich klein geschrieben
+! --------------------------------------------------------------
+
+! Eigene Felder
+string wwText = "Wetterwarnung_Text";
+string wwAktiv = "Wetterwarnung_Aktiv";
+
+! DWD Felder
+string wwCity = "Wetterwarnung_city";        
+string wwRegionName = "Wetterwarnung_regionName";      
+string wwStart = "Wetterwarnung_start";           
+string wwEnd = "Wetterwarnung_end";             
+string wwStartDateTime = "Wetterwarnung_startDateTime";           
+string wwEndDateTime = "Wetterwarnung_endDateTime";             
+string wwLevel = "Wetterwarnung_level";          
+string wwTyp = "Wetterwarnung_typ";            
+string wwState = "Wetterwarnung_state";           
+string wwDescription = "Wetterwarnung_description";     
+string wwEvent = "Wetterwarnung_event";           
+string wwHeadline = "Wetterwarnung_headline";        
+string wwInstruction = "Wetterwarnung_instruction";     
+string wwStateShort = "Wetterwarnung_stateShort";      
+string wwAltitudeStart = "Wetterwarnung_altitudeStart";      ! Wird noch nicht genutzt
+string wwAltitudeEnd = "Wetterwarnung_altitudeEnd";          ! Wird noch nicht genutzt 
+
+!------------------------------------------------------------------------------------------------------------
+! Ausgabe in Systemvariable fuer Push (fuer spaetere Erweiterung)
+!------------------------------------------------------------------------------------------------------------
+string PushVar = "SV_PushMessage";
+
+!------------------------------------------------------------------------------------------------------------
+! Das wars an Konfiguration
+! DWD-Warntabelle in 25k(+25k)-Abschnitten laden bis die Region gefunden wurde
+!------------------------------------------------------------------------------------------------------------
+string url = "https://www.dwd.de/DWD/warnungen/warnapp/json/warnings.json";
+string downloader = "LD_LIBRARY_PATH=/usr/local/addons/cuxd /usr/local/addons/cuxd/curl";
+integer rangefrom = 0;
+integer rangeto = 25000;
+integer loopcounter = 1;
+integer find1 = 0;
+boolean found = false;
+string stdout = "";
+string cmd = downloader # " --range " # rangefrom # "-" # rangeto # " " # url;
+string cut2 = "],";
+var ret ;
+string strRest = "";
+
+!------------------------------------------------------------------------------------------------------------
+! Los gehts...
+!------------------------------------------------------------------------------------------------------------
+string zeit = "";
+string zeit = system.Date("%d.%m. %H:%M Uhr");
+dom.GetObject("Wetterwarnung_timestamp").State(zeit);
+
+if(debug){WriteLine("cmd : "#cmd);}
+
+ret= dom.GetObject(execdevice # ".CMD_SETS").State(cmd);
+!if(debug){WriteLine("ret cmd_sets : "#ret);}
+ret = dom.GetObject(execdevice # ".CMD_QUERY_RET").State(1);
+!if(debug){WriteLine("ret cmd_query_ret: "#ret);}
+stdout = dom.GetObject(execdevice # ".CMD_RETS").State();
+
+!if(debug) {WriteLine("stdout cmd_rets : " #stdout);}
+
+if (stdout)
+{
+    find1 = stdout.Find(city);
+    if ((find1 >= 0) && (stdout.Length() >= 25000)) {
+       rangefrom = rangeto - 99;
+       rangeto = rangeto + 24900;
+       cmd = downloader # " --range " # rangefrom # "-" # rangeto # " " # url;
+       dom.GetObject(execdevice # ".CMD_SETS").State(cmd);
+       dom.GetObject(execdevice # ".CMD_QUERY_RET").State(1);
+       stdout = stdout + dom.GetObject(execdevice # ".CMD_RETS").State();
+    }
+    
+    while ((find1 < 0) && (stdout.Length() >= 25000) && (loopcounter <= 30)) {
+       loopcounter = loopcounter + 1;
+       rangefrom = rangeto - 99;
+       rangeto = rangeto + 24900;
+       cmd = downloader # " --range " # rangefrom # "-" # rangeto # " " # url;
+       dom.GetObject(execdevice # ".CMD_SETS").State(cmd);
+       dom.GetObject(execdevice # ".CMD_QUERY_RET").State(1);
+       stdout = dom.GetObject(execdevice # ".CMD_RETS").State();
+       find1 = stdout.Find(city);
+       if ((find1 >= 0) && (stdout.Length() >= 25000)) {
+          rangefrom = rangefrom + 25000;
+          rangeto = rangeto + 25000;
+          cmd = downloader # " --range " # rangefrom # "-" # rangeto # " " # url;
+          dom.GetObject(execdevice # ".CMD_SETS").State(cmd);
+          dom.GetObject(execdevice # ".CMD_QUERY_RET").State(1);
+          stdout = stdout + dom.GetObject(execdevice # ".CMD_RETS").State();
+       }
+    }
+    
+    
+    found = false;
+    if(stdout.Find(city)>=0) {
+      found = true;
+    }
+}
+
+if(city) {dom.GetObject(wwCity).State(city);}
+
+!------------------------------------------------------------------------------------------------------------
+! Relevanter Bereich ausschneiden und zuweisen
+!------------------------------------------------------------------------------------------------------------
+if(found) {
+
+      if(debug) {WriteLine("Suche nach City :"#city);}
+
+      ! gesuchten Bereich komplett ausschneiden und mit ToLatin() umwandeln
+      stdout = stdout.Substr(stdout.Find(city));
+      stdout = stdout.Substr(0, stdout.Find(cut2)+1).ToLatin();
+      if(debug) {WriteLine("stdout nach Find(City): " #stdout);}
+
+      ! Hier können jetzt mehr als 1 Meldung vorhanden sein
+      ! Diese sind durch geschweifte Klammen getrennt
+      ! Wie kann man diese Auswerten, da zur Zeit immer nur die erste genommen wird? 
+
+  
+      ! regionName (Klartext der gesuchten Region z.B. Rhein-Erft-Kreis)
+      stdout = stdout.Substr(stdout.Find("regionName")+13);
+      var regionName = stdout.Substr(0, stdout.Find(",")-1).Trim();
+      if(debug) {WriteLine("regionName: "#regionName);}
+      if(regionName) {dom.GetObject(wwRegionName).State(regionName);}
+	  if(!regionName) {dom.GetObject(wwRegionName).State("---");}
+      
+      
+      ! start (Uhrzeit ab der die DWD Meldung gültig ist in Sekunden)
+      stdout = stdout.Substr(stdout.Find("start")+7);
+  
+      if(stdout.Substr(0,4) == "null") 
+      { 
+      var start = stdout.Substr(0, stdout.Find(",")-0).Trim();
+      }
+      else
+      {
+      var start = stdout.Substr(0, stdout.Find(",")-3).Trim();
+      }
+
+	  !--------- Originalwert -----
+	  var stdout_orgn = stdout;
+	  !--------- Originalwert -----
+	  
+	  
+      if(debug) {WriteLine("Start stdout : " #stdout);}
+      !Bei Inhalt null keine Anfuehrungszeichen 
+
+  
+      if(debug) {WriteLine("start : " #start);}    
+      if(start) {dom.GetObject(wwStart).State(start);}
+	  if(!start) {dom.GetObject(wwStart).State(0);}
+
+  
+      
+      ! end (Uhrzeit bis zu der die DWD Meldung gültig ist in Sekunden)
+      stdout = stdout.Substr(stdout.Find("end")+5);
+  
+      if(stdout.Substr(0,4) == "null") 
+      { 
+         var end = stdout.Substr(0, stdout.Find(",")-0).Trim();
+      }
+      else
+      {
+         var end = stdout.Substr(0, stdout.Find(",")-3).Trim();
+      }
+  
+      if(debug) {WriteLine("end : " #end);}      
+      if(end) {dom.GetObject(wwEnd).State(end);}
+	  if(!end) {dom.GetObject(wwEnd).State(0);}
+      
+      if(debug) {WriteLine("End stdout : " #stdout);}
+      !Bei Inhalt null keine Anfuehrungszeichen 
+  
+ 
+      ! Umrechnung in Date und Time neu 16.11.2017
+      if(debug) {WriteLine("Start DateTime: " #start.ToInteger().ToTime().ToString());} 
+      if(debug) {WriteLine("End DateTime: " #end.ToInteger().ToTime().ToString());} 
+      dom.GetObject(wwStartDateTime).State(start.ToInteger().ToTime().ToString());
+      dom.GetObject(wwEndDateTime).State(end.ToInteger().ToTime().ToString());
+  
+      !In folgender Tabelle sind Warntypen mit ? markiert, die noch nicht in der Praxis getestet werden konnten!
+      !0 = Gewitter
+      !1 = Wind/Sturm/Orkan
+      !2 = Stark- und Dauerregen
+      !3 = Schneefall/Schneeverwehungen
+      !4 = Nebel ?
+      !5 = Frost
+      !6 = Glätte/Glatteis
+      !7 = Tauwetter ?
+      !8 = Hitzewarnungen ?
+      !9 = UV-Warnungen ?
+      !10 = Küstenwarnungen ?
+      !11 = Binnenseewarnungen ?
+
+	  
+	  ! type (siehe Liste oben)
+      var stdout_type = stdout_orgn.Substr(stdout_orgn.Find("type")+6);
+	  var mtyp = stdout_type.Substr(0, stdout_type.Find(","));
+      if(debug) {WriteLine("mtyp :"#mtyp);}
+      if(mtyp) {dom.GetObject(wwTyp).State(mtyp);}
+	  if(!mtyp) {dom.GetObject(wwTyp).State();}
+      	  
+	! state (Bundesland im Klartext z.B: Nordrhein-Westfalen)
+      var stdout_state = stdout_orgn.Substr(stdout_orgn.Find("state")+8);
+      var state = stdout_state.Substr(0, stdout_state.Find(",")-1);
+      if(debug) {WriteLine("state :"#state);}
+      if(state) {dom.GetObject(wwState).State(state);}
+	        
+      !Level - Vermutung 0 = Vorabwarnung, 1..10 tatsächliche Warnungen
+      var stdout_lvl = stdout_orgn.Substr(stdout_orgn.Find("level")+7);
+      var level = stdout_lvl.Substr(0, stdout_lvl.Find(","));
+      if(debug) {WriteLine("level :"#level);}
+      if(level) {dom.GetObject(wwLevel).State(level);}
+	  
+      ! headline (Überschrift der Meldung z.B. Amtliche WARNUNG vor WINDBÖEN)
+      var stdout_head = stdout_orgn.Substr(stdout_orgn.Find("headline")+11);
+      var headline = stdout_head.Substr(0, stdout_head.Find(",")-1);
+      if(debug) {WriteLine("headline :"#headline);}
+      if(headline) {dom.GetObject(wwHeadline).State(headline);}
+	  
+	  ! description (nähere Erklärung der Meldung im Klartext)
+	  var stdout_desc = stdout_orgn.Substr(stdout_orgn.Find("description")+14);
+	  var descript = stdout_desc.Substr(0, stdout_desc.Find('",')-1);
+	  ! Überflüssige Zeilenumbrüche wegoptimieren, sofern vorhanden
+	  descript = descript.UriEncode();
+	  descript = descript.Replace("%5Cn", " ");
+	  descript = descript.UriDecode();
+	  
+	  if(debug) {WriteLine("descript :"#descript);}
+	  if(descript) {dom.GetObject(wwDescription).State(descript);}
+	  
+	  ! altitude Start
+      var stdout_start = stdout_orgn.Substr(stdout_orgn.Find("altitudeStart")+15);
+      var altitudeStart = stdout_start.Substr(0, stdout_start.Find(","));
+      if(debug) {WriteLine("altitudeStart :"#altitudeStart);}
+      if(altitudeStart) {dom.GetObject(wwAltitudeStart).State(altitudeStart);}
+	        
+      ! event (Kurzform der Meldungsart z.B. Winböen)
+      var stdout_event = stdout_orgn.Substr(stdout_orgn.Find("event")+8);
+      var event = stdout_event.Substr(0, stdout_event.Find("}")-1);
+      if(debug) {WriteLine("event :"#event);}
+      if(event) {dom.GetObject(wwEvent).State(event);}
+	        
+	  ! instruction
+	  var stdout_instr = stdout_orgn.Substr(stdout_orgn.Find("instruction")+14);
+	  var instruction = stdout_instr.Substr(0, stdout_instr.Find(".\",")+1);
+	  if(debug) {WriteLine("instr :"#instruction);}
+	  if(instruction) { dom.GetObject(wwInstruction).State(instruction)};
+	  	  
+      ! altitude End
+      var stdout_end = stdout_orgn.Substr(stdout_orgn.Find("altitudeEnd")+13);
+      var altitudeEnd = stdout_end.Substr(0, stdout_end.Find(","));
+      if(debug) {WriteLine("altitudeEnd :"#altitudeEnd);}
+      if(altitudeEnd) {dom.GetObject(wwAltitudeEnd).State(altitudeEnd);}
+	  
+      ! stateShort (Abkürzung Bundesland z.B: NRW)
+      var stdout_stt_short = stdout_orgn.Substr(stdout_orgn.Find("stateShort")+13);
+      var stateShort = stdout_stt_short.Substr(0, stdout_stt_short.Find(",")-1);
+      if(debug) {WriteLine("stateShort :"#stateShort);}
+      if(stateShort) {dom.GetObject(wwStateShort).State(stateShort);}
+	  
+	  
+
+  if (debug) {WriteLine("Laenge Rest:"#stdout.Length());}
+
+
+     !Vorabinformationen sind auch zu filtern
+     !      if(event.Find("VORABINFORMATION")>=0) && (ShowVorabInfo == false)) {
+     
+     if(event.Find("vorabinformation")>=0) {
+        found = false;
+       if(debug) {WriteLine("if von VorabInformation found :"#found);}
+     } else {
+
+        if(debug) {WriteLine("else von VORABINFORMATION found :"#found);}
+      
+        !------------------------------------------------------------------------------------------------------------
+        ! Auswertung
+        !------------------------------------------------------------------------------------------------------------
+        integer time = system.Date("%F %X").ToTime().ToInteger();
+        var diff1 = time - start.ToInteger();
+        var diff2 = time - end.ToInteger();
+            
+        if(debug) {WriteLine("diff1 :"#diff1);}
+        if(debug) {WriteLine("diff2 :"#diff2);}
+    
+            
+            
+        if(diff1 >= 0 && diff2 <= 0) {
+           dom.GetObject(wwAktiv).State(true);
+           if(debug) {WriteLine("Wetterwarnung auf true");}
+        }
+        else {
+           dom.GetObject(wwAktiv).State(false);
+           if(debug) {WriteLine("Wetterwarnung auf false");}
+        }
+        stdout = start.ToInteger().ToTime().ToString() # " - " # end.ToInteger().ToTime().ToString() # ": " # event ;
+
+        if(debug) {WriteLine("WetterwarnungText     :"#stdout);}
+        if(debug) {WriteLine("WetterwarnungTyp      :"#(mtyp.ToInteger()+1).ToString());}
+        if(debug) {WriteLine("WetterwarnungDescript :"#descript);}
+            
+        dom.GetObject(wwText).State(stdout);
+        dom.GetObject(wwTyp).State(mtyp.ToInteger()+1);
+        dom.GetObject(wwDescription).State(descript);
+      }
+	  
+	  !! Interner Fallback, falls Felder leer sind
+		if(!state) {dom.GetObject(wwState).State("---");}
+		if(!level) {dom.GetObject(wwLevel).State(0);}
+		if(!headline) {dom.GetObject(wwHeadline).State("---");}
+		if(!descript) {dom.GetObject(wwDescription).State(" ");}
+		if(!altitudeStart) {dom.GetObject(wwAltitudeStart).State("---");}
+		if(!event) {dom.GetObject(wwEvent).State(" ");}
+		if(!instruction) { dom.GetObject(wwInstruction).State(" ")};
+		if(!altitudeEnd) {dom.GetObject(wwAltitudeEnd).State("---");}
+		if(!stateShort) {dom.GetObject(wwStateShort).State("---");}
+}
+
+!------------------------------------------------------------------------------------------------------------
+! Allgemeiner Fallback
+! Ausgebaut am 02.08.2018 und auf die einzelnen Felder verteilt
+!------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+if(!found) {
+    if(debug) {WriteLine("Fallback Keine Warnung gefunden - found :"#found);}
+    
+    dom.GetObject(wwAktiv).State(false);
+    dom.GetObject(wwText).State("Keine Warnungen");
+    dom.GetObject(wwTyp).State(0);
+    dom.GetObject(wwCity).State("---");
+    dom.GetObject(wwRegionName).State("---");
+    dom.GetObject(wwStart).State("---");
+    dom.GetObject(wwEnd).State("---");
+    dom.GetObject(wwStartDateTime).State("---");
+    dom.GetObject(wwEndDateTime).State("---");
+    dom.GetObject(wwLevel).State(0);
+    dom.GetObject(wwState).State("---");
+    dom.GetObject(wwDescription).State(" ");
+    dom.GetObject(wwEvent).State(" ");
+    dom.GetObject(wwHeadline).State("---");
+    dom.GetObject(wwStateShort).State("---");
+    dom.GetObject(wwAltitudeStart).State("---");
+    dom.GetObject(wwAltitudeEnd).State("---");
+	dom.GetObject(wwInstruction).State(" ");
+}
