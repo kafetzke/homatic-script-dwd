@@ -165,6 +165,7 @@ if (stdout)
        }
     }
     
+    
     found = false;
     if(stdout.Find(city)>=0) {
       found = true;
@@ -189,6 +190,28 @@ if(found) {
       ! Diese sind durch geschweifte Klammen getrennt
       ! Wie kann man diese Auswerten, da zur Zeit immer nur die erste genommen wird? 
 
+   
+      
+      ! end (Uhrzeit bis zu der die DWD Meldung gültig ist in Sekunden)
+      stdout = stdout.Substr(stdout.Find("end")+5);
+	    
+      if(debug) {WriteLine("stdout vor end : " #stdout);}      
+      if(stdout.Substr(0,4) == "null") 
+      { 
+         var end = stdout.Substr(0, stdout.Find(",")-0).Trim();
+      }
+      else
+      {
+         var end = stdout.Substr(0, stdout.Find(",")-3).Trim();
+      }
+  
+      if(debug) {WriteLine("end : " #end);}      
+      if(end) {dom.GetObject(wwEnd).State(end);}
+	  if(!end) {dom.GetObject(wwEnd).State(0);}
+      
+      if(debug) {WriteLine("End stdout : " #end);}
+      !Bei Inhalt null keine Anfuehrungszeichen 
+  
   
       ! regionName (Klartext der gesuchten Region z.B. Rhein-Erft-Kreis)
       stdout = stdout.Substr(stdout.Find("regionName")+13);
@@ -223,26 +246,7 @@ if(found) {
       if(start) {dom.GetObject(wwStart).State(start);}
 	  if(!start) {dom.GetObject(wwStart).State(0);}
 
-  
-      
-      ! end (Uhrzeit bis zu der die DWD Meldung gültig ist in Sekunden)
-      stdout = stdout.Substr(stdout.Find("\"end")+6);
-	    
-      if(stdout.Substr(0,4) == "null") 
-      { 
-         var end = stdout.Substr(0, stdout.Find(",")-0).Trim();
-      }
-      else
-      {
-         var end = stdout.Substr(0, stdout.Find(",")-3).Trim();
-      }
-  
-      if(debug) {WriteLine("end : " #end);}      
-      if(end) {dom.GetObject(wwEnd).State(end);}
-	  if(!end) {dom.GetObject(wwEnd).State(0);}
-      
-      if(debug) {WriteLine("End stdout : " #stdout);}
-      !Bei Inhalt null keine Anfuehrungszeichen 
+ 
   
  
       ! Umrechnung in Date und Time neu 16.11.2017
