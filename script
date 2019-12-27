@@ -1,7 +1,7 @@
-! ------  DWD Unwetterwarnung -------------------------------------------------------------------------------
-! Unwetterwarnungsscript von kafetzke
-! auf Basis des Scriptes von Grrzzz und klana
-! Version 1.21 vom 27.12.2019
+! ------  DWD Unwetterwarnung 04.10.2018  Vers. 1.13 -----------------------------------------------------------
+! Unwetterwarnungsscript von Grrzzz / klana / kafetzke
+! Version 1.2 vom 29.08.2019
+!
 ! https://homematic-forum.de/forum/viewtopic.php?f=31&t=38161
 !------------------------------------------------------------------------------------------------------------
 
@@ -132,10 +132,10 @@ ret= dom.GetObject(execdevice # ".CMD_SETS").State(cmd);
 if(debug){WriteLine("ret cmd_sets : "#ret);}
 ret = dom.GetObject(execdevice # ".CMD_QUERY_RET").State(1);
 
-if(debug){WriteLine("ret cmd_query_ret: "#ret);}
+! if(debug){WriteLine("ret cmd_query_ret: "#ret);}
 stdout = dom.GetObject(execdevice # ".CMD_RETS").State();
 
-if(debug) {WriteLine("stdout cmd_rets : " #stdout);}
+! if(debug) {WriteLine("stdout cmd_rets : " #stdout);}
 
 if (stdout)
 {
@@ -181,6 +181,7 @@ if(city) {dom.GetObject(wwCity).State(city);}
 ! Relevanter Bereich ausschneiden und zuweisen
 !------------------------------------------------------------------------------------------------------------
 if(found) {
+      
 
       if(debug) {WriteLine("Suche nach City :"#city);}
 
@@ -193,12 +194,25 @@ if(found) {
       ! Diese sind durch geschweifte Klammen getrennt
       ! Wie kann man diese Auswerten, da zur Zeit immer nur die erste genommen wird? 
 
+  ! start (Uhrzeit ab der die DWD Meldung gültig ist in Sekunden)
+    
+  
+    stdout = stdout.Substr(stdout.Find("start")+7);
+    if(debug) {WriteLine("Start stdout : " #stdout);} 
+      
+    if(stdout.Substr(0,4) == "null") 
+      { 
+		var start = stdout.Substr(0, stdout.Find(",")-0).Trim();
+      }
+	  else
+      {
+		var start = stdout.Substr(0, stdout.Find(",")-3).Trim();
+      }
    
       
       ! end (Uhrzeit bis zu der die DWD Meldung gültig ist in Sekunden)
       stdout = stdout.Substr(stdout.Find("end")+5);
 	    
-      if(debug) {WriteLine("stdout vor end : " #stdout);}      
       if(stdout.Substr(0,4) == "null") 
       { 
          var end = stdout.Substr(0, stdout.Find(",")-0).Trim();
@@ -207,6 +221,13 @@ if(found) {
       {
          var end = stdout.Substr(0, stdout.Find(",")-3).Trim();
       }
+  
+
+      !Bei Inhalt null keine Anfuehrungszeichen 
+
+  
+      if(start) {dom.GetObject(wwStart).State(start);}
+	  if(!start) {dom.GetObject(wwStart).State(0);}
   
       if(debug) {WriteLine("end : " #end);}      
       if(end) {dom.GetObject(wwEnd).State(end);}
@@ -224,34 +245,23 @@ if(found) {
 	  if(!regionName) {dom.GetObject(wwRegionName).State("---");}
       
       
-      ! start (Uhrzeit ab der die DWD Meldung gültig ist in Sekunden)
-      stdout = stdout.Substr(stdout.Find("start")+7);
-  
-      if(stdout.Substr(0,4) == "null") 
-      { 
-		var start = stdout.Substr(0, stdout.Find(",")-0).Trim();
-      }
-	  else
-      {
-		var start = stdout.Substr(0, stdout.Find(",")-3).Trim();
-      }
+!      ! start (Uhrzeit ab der die DWD Meldung gültig ist in Sekunden)
+!  
+!    stdout = stdout.Substr(stdout.Find("start")+2);
+!  
+!      if(stdout.Substr(0,4) == "null") 
+!      { 
+!		var start = stdout.Substr(0, stdout.Find(",")-0).Trim();
+!      }
+!	  else
+!      {
+!		var start = stdout.Substr(0, stdout.Find(",")-3).Trim();
+!      }
 
 	  !--------- Originalwert -----
 	  var stdout_orgn = stdout;
 	  !--------- Originalwert -----
-	  
-	  
-      if(debug) {WriteLine("Start stdout : " #stdout);}
-      !Bei Inhalt null keine Anfuehrungszeichen 
-
-  
-      ! if(debug) {WriteLine("start : " #start);}    
-      if(start) {dom.GetObject(wwStart).State(start);}
-	  if(!start) {dom.GetObject(wwStart).State(0);}
-
- 
-  
- 
+	
       ! Umrechnung in Date und Time neu 16.11.2017
       if(debug) {WriteLine("Start DateTime: " #start.ToInteger().ToTime().ToString());} 
       if(debug) {WriteLine("End DateTime: " #end.ToInteger().ToTime().ToString());} 
