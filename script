@@ -1,15 +1,16 @@
 ! ------  DWD Unwetterwarnung -------------------------------------------------------------------------------
-! Unwetterwarnungsscript von Grrzzz / klana / kafetzke
-! Version 1.21 vom 10.09.2019
-!
+! Unwetterwarnungsscript von kafetzke
+! auf Basis des Scriptes von Grrzzz und klana
+! Version 1.21 vom 27.12.2019
 ! https://homematic-forum.de/forum/viewtopic.php?f=31&t=38161
 !------------------------------------------------------------------------------------------------------------
 
 !------------------------------------------------------------------------------------------------------------
 ! Konfiguration
 !------------------------------------------------------------------------------------------------------------
-! Anzulegen fuer das Script Wetterwarn_DWD sind die folgenden Systemvariablen
-! Name				Typ
+! Anzulegen fuer das Script Wetterwarn_DWD sind die 
+! folgenden Systemvariablen, welche besser über das Einmalsscript angelegt werden.
+! Das Einmalscript unter Script testen eingefügt und einmalig ausführen.
 ! --------------------------------------------------------------
 ! Wetterwarnung_Aktiv           Boolean
 ! Wetterwarnung_Text            Zeichenkette (für Ausgabe)  
@@ -30,14 +31,9 @@
 ! Wetterwarnung_stateShort      Zeichenkette
 ! Wetterwarnung_altitudeStart   Zeichenkette
 ! Wetterwarnung_altitudeEnd     Zeichenkette
-! Wetterwarnung_timestamp	Zeichenkette
 !
-
 !------------------------------------------------------------------------------------------------------------
-! Virtuelles CUxD-Exec-Device hier angeben
-! --------------------------------------------------------------
 
-string execdevice = "CUxD.CUX2801001:1";
 !------------------------------------------------------------------------------------------------------------
 ! Debugging einschalten = true oder aussschalten = false
 ! z.B. zum Test unter "Script testen"
@@ -50,6 +46,11 @@ boolean debug = false;
 boolean ShowVorabInfo = true;
 
 ! --------------------------------------------------------------
+! Virtuelles CUxD-Exec-Device hier angeben
+! --------------------------------------------------------------
+string execdevice = "CUxD.CUX2801001:1";
+
+! --------------------------------------------------------------
 ! Die Region-ID aus der JSON Datei raussuchen, dazu diese Adresse
 ! im Browser eingeben:
 !  https://www.dwd.de/DWD/warnungen/warnapp/json/warnings.json
@@ -59,12 +60,22 @@ boolean ShowVorabInfo = true;
 
 ! Für Berlin z.B. 111000000
 ! --------------------------------------------------------------
- string city = "103254000";   ! Kreis Hildesheim
-! string city = "803254029";   ! Gemeinde Schellerten
+string city = "103254000";   ! Kreis Hildesheim
+! string city = "803254021";   ! Stadt Hildesheim
+
+
+
+
 
 ! --------------------------------------------------------------
+! Nötige CCU-Systemvariablen zuweisen
+! In der CCU anzulegende Systemvariablen stehen nachfolgend in Anführungszeichen
+! Am Besten mit dem "Einmalscript" automatisch anlegen lassen!
+! _Text und _Aktiv sind Anfangsbuchstabe nach Unterstrich gross und 
+! alle DWD Felder sind Anfangsbuchstabe nach Unterstrich klein geschrieben
+! --------------------------------------------------------------
 
-! Script-interne Variablen
+! Eigene Felder
 string wwText = "Wetterwarnung_Text";
 string wwAktiv = "Wetterwarnung_Aktiv";
 
@@ -92,6 +103,7 @@ string wwAltitudeEnd = "Wetterwarnung_altitudeEnd";          ! Wird noch nicht g
 string PushVar = "SV_PushMessage";
 
 !------------------------------------------------------------------------------------------------------------
+! Das wars an Konfiguration
 ! DWD-Warntabelle in 25k(+25k)-Abschnitten laden bis die Region gefunden wurde
 !------------------------------------------------------------------------------------------------------------
 string url = "https://www.dwd.de/DWD/warnungen/warnapp/json/warnings.json";
@@ -305,7 +317,8 @@ if(found) {
 	        
       ! event (Kurzform der Meldungsart z.B. Winböen)
       var stdout_event = stdout_orgn.Substr(stdout_orgn.Find("event")+8);
-      var event = stdout_event.Substr(0, stdout_event.Find("}")-1);
+      if(debug) {WriteLine("stdout_event :"#stdout_event);}
+      var event = stdout_event.Substr(0, stdout_event.Find(",")-1);
       if(debug) {WriteLine("event :"#event);}
       if(event) {dom.GetObject(wwEvent).State(event);}
 	        
